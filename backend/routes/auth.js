@@ -1,5 +1,4 @@
 import bcrypt from 'bcrypt';
-import express from 'express';
 import jwt from 'jsonwebtoken';
 import { Router } from 'express';
 import User from '../models/User.js';
@@ -7,11 +6,33 @@ import User from '../models/User.js';
 const router = Router();
 const jwtSecret = process.env.JWT_SECRET;
 
+
+// Middleware for authenticating tokens
+const authenticateToken = (req, res, next) => {
+    const token = req.header('Authorization')?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'Unauthorized' });
+
+    jwt.verify(token, jwtSecret, (err, user) => {
+        if (err) return res.status(403).json({ message: 'Forbidden' });
+        req.user = user;
+        next();
+    });
+};
+
+// Middleware for checking admin access
+const isAdmin = (req, res, next) => {
+    if (!req.user || !req.user.isAdmin) {
+        return res.status(403).json({ message: 'Access denied: Admins only' });
+    }
+    next();
+};
+
 // Endpoint to register a new user
 router.post('/register', async (req, res) => {
     try {
-        const { firstName, lastName, email, username, password } = req.body;
-        const user = new User({ firstName, lastName, email, username, password });
+        const { firstName, lastName, email, username, password, isAdmin = false } = req.body;
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = new User({ firstName, lastName, email, username, password: hashedPassword, isAdmin });
         await user.save();
         res.status(201).json({ message: 'User registered successfully' });
     } catch (error) {
@@ -29,7 +50,7 @@ router.post('/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
         
-        const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, jwtSecret);
+        const token = jwt.sign({ id: user._id, isAdmin: user.isAdmin }, jwtSecret, { expiresIn: '1h' });
         res.status(200).json({ token });
         
     } catch (error) {
@@ -37,4 +58,5 @@ router.post('/login', async (req, res) => {
     }
 });
 
+export { authenticateToken, isAdmin };
 export default router;

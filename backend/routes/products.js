@@ -1,4 +1,3 @@
-import express from 'express';
 import Product from '../models/Product.js';
 import { Router } from 'express';
 
